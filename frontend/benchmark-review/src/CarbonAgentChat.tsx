@@ -369,7 +369,7 @@ export function CarbonAgentChat({
         await pushAssistant("还差最后一步：确认右侧策略后我才会去 PRIDE 搜。");
         return;
       }
-      if (!(intentRef.current.selectedSearchTerms || []).map(text).filter(Boolean).length) {
+      if (intentRef.current.repository !== "local" && !(intentRef.current.selectedSearchTerms || []).map(text).filter(Boolean).length) {
         setIntent({ ...intentRef.current, confirmed: false });
         setPhase("awaiting_confirm");
         await pushAssistant("请至少选择或补充一个实际检索词；本次没有访问仓库。");
@@ -521,8 +521,12 @@ export function CarbonAgentChat({
       return;
     }
     const selectedTerms = normalizeSearchTerms(rawSelectedTerms).slice(0, 100);
-    if (!selectedTerms.length) {
+    if (intentRef.current.repository !== "local" && !selectedTerms.length) {
       await pushAssistant("请至少选择或补充一个实际检索词；本次没有访问仓库。");
+      return;
+    }
+    if (intentRef.current.repository === "local" && !text(intentRef.current.localDir)) {
+      await pushAssistant("请先选择或填写本地数据集目录；本次没有访问仓库。");
       return;
     }
     if (queryTerms || selectedTerms.join("\u0000") !== (intentRef.current.selectedSearchTerms || []).join("\u0000")) {

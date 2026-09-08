@@ -97,6 +97,7 @@ export interface IntentSpec {
   /** Canonical strategy fields explicitly decided, including intentional open values. */
   resolvedFields: string[];
   repository: string;
+  localDir?: string;
   confirmed: boolean;
   answered: Partial<Record<QuestionId, boolean>>;
   inferred: Partial<Record<QuestionId, boolean>>;
@@ -133,6 +134,7 @@ export interface DiscoveryJobPayload {
   runtime: string;
   source: string;
   repository: string;
+  local_dir: string;
   output_language: string;
   constraints_enabled: boolean;
   goal: string;
@@ -229,6 +231,7 @@ export function createEmptyIntent(prompt = ""): IntentSpec {
     openRisks: [],
     resolvedFields: [],
     repository: "pride",
+    localDir: "",
     confirmed: false,
     answered: { Q2: true },
     inferred: {},

@@ -370,6 +370,7 @@ export default function App() {
                 onConfirm={(queryTerms) =>
                   setExternalCommand({ type: "confirm", queryTerms })
                 }
+                onIntentChange={setIntent}
                 selectedSearchTerms={selectedSearchTerms}
                 onSelectedSearchTermsChange={setSelectedSearchTerms}
                 onApplyDefaults={() =>

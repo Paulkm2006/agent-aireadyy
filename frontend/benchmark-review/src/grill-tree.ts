@@ -2259,8 +2259,9 @@ export function toDiscoveryJobPayload(spec: IntentSpec): DiscoveryJobPayload {
   return {
     prompt,
     runtime: "openai_agents",
-    source: "remote",
+    source: spec.repository === "local" ? "local" : "remote",
     repository: spec.repository || "pride",
+    local_dir: (spec.localDir || "").trim(),
     output_language: "zh-CN",
     constraints_enabled: hardFields.length > 1,
     goal,
