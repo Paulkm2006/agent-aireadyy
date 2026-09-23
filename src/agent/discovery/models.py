@@ -257,6 +257,13 @@ class DiscoveredFile(JsonModel):
     instrument_generation_score: float | None = Field(default=None, ge=0.0, le=1.0)
     instrument_generation_label: str | None = None
     fragmentation_methods: list[str] = Field(default_factory=list)
+    tissue: str | None = None
+    enzyme: str | None = None
+    instrument_vendor: str | None = None
+    isolation_window: float | None = None
+    resolution: float | None = None
+    collision_energy: float | None = None
+    scan_range: str | None = None
     lc_gradient: str | None = None
     lc_gradient_minutes: float | None = None
     diversity_tags: list[str] = Field(default_factory=list)

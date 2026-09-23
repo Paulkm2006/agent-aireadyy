@@ -23,6 +23,7 @@ def preview_command(
     validation_ratio: float = typer.Option(0.15),
     test_ratio: float = typer.Option(0.15),
     seed: int = typer.Option(42),
+    benchmark_profile: str = typer.Option(""),
 ) -> None:
     """Plan all protocols without writing or registering a release."""
 
@@ -31,6 +32,10 @@ def preview_command(
         ratios=(train_ratio, validation_ratio, test_ratio),
         seed=seed,
         task_type=task_type,
+        task_spec={
+            "task_type": task_type,
+            **({"benchmark_profile": benchmark_profile} if benchmark_profile else {}),
+        },
     )
     typer.echo(suite.model_dump_json(indent=2))
 

@@ -129,8 +129,18 @@ def test_denovo_exporter_uses_task_build_plan_metadata(tmp_path: Path):
                         "project_accession": "PXD000002",
                         "file_name": "sample.raw",
                         "species": ["human"],
+                        "tissue": "liver",
+                        "enzyme": "Trypsin",
+                        "instrument_names": ["Q Exactive HF"],
+                        "instrument_vendor": "Thermo Fisher Scientific",
                         "instrument_families": ["orbitrap"],
                         "fragmentation_methods": ["HCD"],
+                        "acquisition_mode": "dda",
+                        "isolation_window": 1.6,
+                        "resolution": 30000,
+                        "collision_energy": 30,
+                        "scan_range": "100-1600 m/z",
+                        "lc_gradient_minutes": 90,
                         "ptm_type": "phospho",
                     }
                 ]
@@ -145,8 +155,51 @@ def test_denovo_exporter_uses_task_build_plan_metadata(tmp_path: Path):
     assert frame.loc[0, "project_accession"] == "PXD000002"
     assert frame.loc[0, "species"] == "human"
     assert frame.loc[0, "instrument_family"] == "orbitrap"
+    assert frame.loc[0, "instrument_name"] == "Q Exactive HF"
+    assert frame.loc[0, "instrument_vendor"] == "Thermo Fisher Scientific"
     assert frame.loc[0, "fragmentation_method"] == "HCD"
+    assert frame.loc[0, "acquisition_mode"] == "dda"
+    assert frame.loc[0, "isolation_window"] == 1.6
+    assert frame.loc[0, "resolution"] == 30000
+    assert frame.loc[0, "collision_energy"] == 30
+    assert frame.loc[0, "scan_range"] == "100-1600 m/z"
+    assert frame.loc[0, "lc_gradient_minutes"] == 90
+    assert frame.loc[0, "tissue"] == "liver"
+    assert frame.loc[0, "enzyme"] == "Trypsin"
     assert frame.loc[0, "ptm_type"] == "phospho"
+
+
+def test_denovo_exporter_collapses_exact_fragpipe_sage_consensus(tmp_path: Path):
+    fragpipe = _write_tsv(
+        tmp_path / "fragpipe.tsv",
+        [{
+            "Peptide": "PEPTIDEK", "Modified Peptide": "PEP[+80]TIDEK",
+            "Charge": 2, "Spectrum": "scan=101", "Spectrum File": "sample.raw",
+            "PSM Q-Value": 0.003, "Search Engine": "MSFragger",
+        }],
+    )
+    sage = _write_tsv(
+        tmp_path / "sage.tsv",
+        [{
+            "Peptide": "PEPTIDEK", "Modified Peptide": "PEP[+80]TIDEK",
+            "Charge": 2, "Spectrum": "scan=101", "Spectrum File": "sample.raw",
+            "PSM Q-Value": 0.007, "Search Engine": "Sage",
+        }],
+    )
+
+    result = export_denovo_ai_ready(
+        [fragpipe, sage], [_write_mgf(tmp_path / "spectra.mgf")], tmp_path / "denovo"
+    )
+
+    frame = pd.read_parquet(result.output_parquet)
+    assert len(frame) == 1
+    assert frame.loc[0, "search_engine"] == "FragPipe∩Sage"
+    assert json.loads(frame.loc[0, "search_engines_json"]) == ["fragpipe", "sage"]
+    assert json.loads(frame.loc[0, "engine_q_values_json"]) == {
+        "fragpipe": 0.003,
+        "sage": 0.007,
+    }
+    assert frame.loc[0, "q_value"] == 0.007
 
 
 def test_denovo_exporter_cli_writes_outputs(tmp_path: Path):

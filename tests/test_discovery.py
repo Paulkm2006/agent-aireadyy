@@ -547,9 +547,12 @@ class FakeSdrfPrideClient(FakePrideClient):
             "comment[data file]\tcharacteristics[cell line]\tcharacteristics[organism]"
             "\tcharacteristics[disease]\tfactor value[treatment]\tcomment[data acquisition method]"
             "\tcomment[fraction identifier]\tcomment[instrument]\tcomment[fragmentation method]"
-            "\tcomment[LC gradient]\n"
+            "\tcomment[LC gradient]\tcharacteristics[organism part]\tcomment[enzyme]"
+            "\tcomment[isolation window]\tcomment[resolution]\tcomment[collision energy]"
+            "\tcomment[scan range]\n"
             "HeLa_01.raw\tHeLa\tHomo sapiens\tcervical cancer\tDMSO\tDDA\t1"
-            "\tOrbitrap Fusion Lumos\tCID\t120 min\n"
+            "\tOrbitrap Fusion Lumos\tCID\t120 min\tcervix\tTrypsin"
+            "\t1.6 m/z\t30000\t30 NCE\t100-1600 m/z\n"
         )
 
 
@@ -563,6 +566,12 @@ def test_discovery_extracts_file_level_sdrf_features():
     assert "orbitrap" in file.instrument_families
     assert file.fragmentation_methods == ["CID"]
     assert file.lc_gradient_minutes == 120.0
+    assert file.tissue == "cervix"
+    assert file.enzyme == "Trypsin"
+    assert file.isolation_window == 1.6
+    assert file.resolution == 30000.0
+    assert file.collision_energy == 30.0
+    assert file.scan_range == "100-1600 m/z"
     summary = manifest.projects[0].sdrf_summary
     expected_text = FakeSdrfPrideClient().download_text("unused")
     assert summary["status"] == "available"

@@ -8,6 +8,10 @@ from pandera.errors import SchemaErrors
 
 from agent.dataset_construction.models import DatasetCatalog
 from agent.dataset_construction.ingestion import canonical_task_type
+from agent.dataset_construction.benchmark import (
+    benchmark_coverage_report,
+    denovo_benchmark_policy,
+)
 
 
 class DatasetContractError(ValueError):
@@ -52,7 +56,9 @@ def validate_catalog(
     """Validate release-blocking invariants and return a compact evidence record."""
 
     if not catalog.observations:
-        raise DatasetContractError("catalog contains no model observations")
+        detail = catalog.curation_report.get("filter_counts")
+        suffix = f": benchmark filters={detail}" if detail else ""
+        raise DatasetContractError(f"catalog contains no model observations{suffix}")
     frame = pd.DataFrame(
         [observation.model_dump(mode="python") for observation in catalog.observations]
     )
@@ -89,6 +95,7 @@ def validate_catalog(
     max_q_value = (
         float(max_q_value_raw) if max_q_value_raw is not None else None
     )
+    benchmark_policy = denovo_benchmark_policy(task_spec)
     violations: list[str] = []
     for observation in catalog.observations:
         if task_type and canonical_task_type(observation.task_type) != task_type:
@@ -130,6 +137,81 @@ def validate_catalog(
         elif task_type == "ptm_denovo":
             if not observation.modified_peptide.strip() or not label.get("modification_tokens"):
                 violations.append(f"missing_modified_peptide_label:{observation.observation_id}")
+        if benchmark_policy is not None:
+            engines = {value.strip().casefold() for value in observation.search_engines}
+            required_engines = {
+                str(value).strip().casefold()
+                for value in benchmark_policy["required_search_engines"]
+            }
+            if "dda" not in observation.acquisition_id.casefold():
+                violations.append(f"benchmark_requires_dda:{observation.observation_id}")
+            if not required_engines.issubset(engines):
+                violations.append(f"benchmark_missing_engine_consensus:{observation.observation_id}")
+            if observation.peak_count is None:
+                violations.append(f"benchmark_missing_peak_count:{observation.observation_id}")
+            if not observation.spectrum_mz or not observation.spectrum_intensity:
+                violations.append(f"benchmark_missing_msms_peaks:{observation.observation_id}")
+            elif len(observation.spectrum_mz) != len(observation.spectrum_intensity):
+                violations.append(f"benchmark_mismatched_msms_peaks:{observation.observation_id}")
+            elif observation.peak_count != len(observation.spectrum_mz):
+                violations.append(f"benchmark_peak_count_mismatch:{observation.observation_id}")
+            required_metadata = {
+                "scan_number": observation.scan_number,
+                "precursor_mz": observation.precursor_mz,
+                "charge": observation.charge,
+                "species": observation.organism_id,
+                "tissue": observation.tissue,
+                "instrument": observation.instrument_id,
+                "fragmentation": observation.fragmentation_method,
+                "isolation_window": observation.isolation_window,
+                "resolution": observation.resolution,
+                "collision_energy": observation.collision_energy,
+                "scan_range": observation.scan_range,
+                "lc_gradient_minutes": observation.lc_gradient_minutes,
+                "enzyme": observation.enzyme,
+            }
+            for field, value in required_metadata.items():
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    violations.append(
+                        f"benchmark_missing_metadata:{observation.observation_id}:{field}"
+                    )
+            modified = {
+                value.strip().casefold()
+                for value in observation.modification_classes
+                if value.strip()
+            } - {"none", "unmodified", "no modification"}
+            if modified and not observation.modification_sites:
+                violations.append(
+                    f"benchmark_missing_modification_sites:{observation.observation_id}"
+                )
+            for engine in sorted(required_engines):
+                q_value = observation.engine_q_values.get(engine)
+                if q_value is None:
+                    violations.append(
+                        f"benchmark_missing_engine_q_value:{observation.observation_id}:{engine}"
+                    )
+                elif q_value > float(benchmark_policy["max_q_value"]):
+                    violations.append(
+                        f"benchmark_engine_q_value_above_threshold:{observation.observation_id}:{engine}:{q_value}"
+                    )
+    benchmark_report: dict[str, Any] = {}
+    if benchmark_policy is not None:
+        peptide_counts = frame.assign(
+            _peptidoform=frame["modified_peptide"].replace("", pd.NA).fillna(frame["peptide"])
+        )["_peptidoform"].value_counts()
+        cap = int(benchmark_policy["max_spectra_per_modified_peptide"])
+        if not peptide_counts.empty and int(peptide_counts.max()) > cap:
+            violations.append(
+                f"benchmark_peptidoform_frequency_above_cap:{int(peptide_counts.max())}>{cap}"
+            )
+        benchmark_report = benchmark_coverage_report(
+            catalog.observations,
+            policy=benchmark_policy,
+        )
+        violations.extend(
+            f"benchmark_coverage:{issue}"
+            for issue in benchmark_report["blocking_issues"]
+        )
     if violations:
         raise DatasetContractError(
             f"catalog violates task label policy: {violations}"
@@ -149,4 +231,5 @@ def validate_catalog(
             "max_q_value": max_q_value,
             "status": "pass",
         },
+        "benchmark_profile": benchmark_report,
     }

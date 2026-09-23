@@ -11,6 +11,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from agent.dataset_construction.contracts import validate_catalog
+from agent.dataset_construction.benchmark import benchmark_overlap_report
 from agent.dataset_construction.identity_ledger import build_identity_ledger
 from agent.dataset_construction.leakage import audit_split
 from agent.dataset_construction.models import (
@@ -204,6 +205,46 @@ def build_dataset_release(
     _write_json(task_spec_path, task_spec)
     contract_path = root / "validation" / "catalog_contract.json"
     _write_json(contract_path, contract_evidence)
+    benchmark_report_path = root / "validation" / "benchmark_quality_report.json"
+    strict_benchmark = bool(catalog.curation_report)
+    benchmark_report = {
+        "status": catalog.curation_report.get("status", "not_requested"),
+        "curation": catalog.curation_report,
+        "overlap": benchmark_overlap_report(catalog, suite),
+        "provenance_pipeline": (
+            [
+                "raw_file",
+                "peaklist_mgf",
+                "fragpipe_and_sage_search",
+                "one_percent_fdr_consensus",
+                "spectrum_quality_control",
+                "representative_scan_cap",
+                "leakage_aware_split",
+                "immutable_release",
+            ]
+            if strict_benchmark
+            else ["existing_batch", "catalog_contract", "leakage_aware_split", "immutable_release"]
+        ),
+    }
+    _write_json(benchmark_report_path, benchmark_report)
+    benchmark_index_path = root / "catalog" / "benchmark_index.parquet"
+    observations_by_id = {
+        row.observation_id: row.model_dump(mode="json")
+        for row in catalog.observations
+    }
+    _write_parquet(
+        benchmark_index_path,
+        [
+            {
+                **observations_by_id[allocation.observation_id],
+                "protocol": protocol,
+                "split": allocation.split,
+                "component_id": allocation.component_id,
+            }
+            for protocol, plan in suite.protocols.items()
+            for allocation in plan.allocations
+        ],
+    )
     identity_ledger = build_identity_ledger(catalog, policy=suite.policy)
     identity_ledger_path = root / "identity_ledger" / "assertions.parquet"
     _write_parquet(
@@ -247,8 +288,10 @@ def build_dataset_release(
             "source_batch_dir": catalog.source_batch_dir,
             "observation_count": len(catalog.observations),
             "task_spec": task_spec,
+            "benchmark": catalog.curation_report,
             "ratios": suite.ratios,
             "seed": suite.seed,
+            "split_policy": suite.policy.model_dump(mode="json"),
             "protocols": protocol_manifest,
         },
     )
@@ -288,6 +331,8 @@ def build_dataset_release(
             "catalog_parquet": str(catalog_path),
             "task_spec_snapshot_json": str(task_spec_path),
             "catalog_contract_json": str(contract_path),
+            "benchmark_quality_report_json": str(benchmark_report_path),
+            "benchmark_index_parquet": str(benchmark_index_path),
             "identity_ledger_parquet": str(identity_ledger_path),
             "identity_ledger_summary_json": str(identity_summary_path),
             "prov_json": str(prov_path),

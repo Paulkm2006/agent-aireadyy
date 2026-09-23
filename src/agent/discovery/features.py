@@ -28,6 +28,12 @@ class DiscoveryFeatureSummary:
     instrument_generation_score: float | None = None
     instrument_generation_label: str | None = None
     fragmentation_methods: list[str] = field(default_factory=list)
+    tissue: str | None = None
+    enzyme: str | None = None
+    isolation_window: float | None = None
+    resolution: float | None = None
+    collision_energy: float | None = None
+    scan_range: str | None = None
     lc_gradient: str | None = None
     lc_gradient_minutes: float | None = None
     evidence: list[DiscoveryEvidence] = field(default_factory=list)
@@ -97,7 +103,7 @@ def _sdrf_text_fields(rows: list[dict[str, Any]], *, limit: int = 500) -> list[t
             if not text:
                 continue
             normalized = column.casefold()
-            if any(token in normalized for token in ("instrument", "fragment", "dissociation", "collision", "gradient", "chromatography", "acquisition", "laborator", "institution", "institute", "organization", "organisation", "center", "centre")):
+            if any(token in normalized for token in ("instrument", "fragment", "dissociation", "collision", "gradient", "chromatography", "acquisition", "laborator", "institution", "institute", "organization", "organisation", "center", "centre", "tissue", "organism part", "enzyme", "protease", "isolation window", "resolution", "scan range")):
                 fields.append((f"sdrf:{column}", text))
     return fields
 
@@ -315,12 +321,47 @@ def _lc_gradient_from_fields(fields: list[tuple[str, str]]) -> tuple[str | None,
     return best_text, best_minutes, evidence
 
 
+def _named_text_from_fields(
+    fields: list[tuple[str, str]],
+    *name_tokens: str,
+) -> tuple[str | None, list[DiscoveryEvidence]]:
+    for field_name, text in fields:
+        if text and any(token in field_name.casefold() for token in name_tokens):
+            value = re.sub(r"\s+", " ", text).strip()
+            return value, [
+                DiscoveryEvidence(
+                    field=field_name,
+                    source="method_metadata",
+                    text=value[:240],
+                    weight=7,
+                )
+            ]
+    return None, []
+
+
+def _named_number_from_fields(
+    fields: list[tuple[str, str]],
+    *name_tokens: str,
+) -> tuple[float | None, list[DiscoveryEvidence]]:
+    text, evidence = _named_text_from_fields(fields, *name_tokens)
+    if text is None:
+        return None, []
+    match = re.search(r"[-+]?\d+(?:\.\d+)?", text)
+    return (float(match.group(0)), evidence) if match else (None, evidence)
+
+
 def merge_feature_summaries(*summaries: DiscoveryFeatureSummary) -> DiscoveryFeatureSummary:
     names = _dedupe(name for summary in summaries for name in summary.instrument_names)
     families = _known(family for summary in summaries for family in summary.instrument_families)
     laboratories = _dedupe(name for summary in summaries for name in summary.laboratory_names)
     fragmentations = _dedupe(method for summary in summaries for method in summary.fragmentation_methods)
     lc_summary = next((summary for summary in summaries if summary.lc_gradient), None)
+    tissue_summary = next((summary for summary in summaries if summary.tissue), None)
+    enzyme_summary = next((summary for summary in summaries if summary.enzyme), None)
+    isolation_summary = next((summary for summary in summaries if summary.isolation_window is not None), None)
+    resolution_summary = next((summary for summary in summaries if summary.resolution is not None), None)
+    collision_summary = next((summary for summary in summaries if summary.collision_energy is not None), None)
+    scan_summary = next((summary for summary in summaries if summary.scan_range), None)
     evidence = [item for summary in summaries for item in summary.evidence]
     generation_candidates = [
         (summary.instrument_generation_score, summary.instrument_generation_label)
@@ -339,6 +380,12 @@ def merge_feature_summaries(*summaries: DiscoveryFeatureSummary) -> DiscoveryFea
         instrument_generation_score=generation_score,
         instrument_generation_label=generation_label,
         fragmentation_methods=fragmentations,
+        tissue=tissue_summary.tissue if tissue_summary else None,
+        enzyme=enzyme_summary.enzyme if enzyme_summary else None,
+        isolation_window=isolation_summary.isolation_window if isolation_summary else None,
+        resolution=resolution_summary.resolution if resolution_summary else None,
+        collision_energy=collision_summary.collision_energy if collision_summary else None,
+        scan_range=scan_summary.scan_range if scan_summary else None,
         lc_gradient=lc_summary.lc_gradient if lc_summary else None,
         lc_gradient_minutes=lc_summary.lc_gradient_minutes if lc_summary else None,
         evidence=evidence,
@@ -360,6 +407,12 @@ def extract_project_features(project: dict[str, Any], sdrf_rows: list[dict[str, 
     generation_score, generation_label = instrument_generation(names)
     fragmentation, fragmentation_evidence = _fragmentation_from_fields(fields)
     lc_gradient, lc_minutes, lc_evidence = _lc_gradient_from_fields(fields)
+    tissue, tissue_evidence = _named_text_from_fields(fields, "tissue", "organism part")
+    enzyme, enzyme_evidence = _named_text_from_fields(fields, "enzyme", "protease")
+    isolation_window, isolation_evidence = _named_number_from_fields(fields, "isolation window")
+    resolution, resolution_evidence = _named_number_from_fields(fields, "resolution")
+    collision_energy, collision_evidence = _named_number_from_fields(fields, "collision energy")
+    scan_range, scan_evidence = _named_text_from_fields(fields, "scan range")
 
     return DiscoveryFeatureSummary(
         instrument_names=names,
@@ -368,6 +421,12 @@ def extract_project_features(project: dict[str, Any], sdrf_rows: list[dict[str, 
         instrument_generation_score=generation_score,
         instrument_generation_label=generation_label,
         fragmentation_methods=fragmentation,
+        tissue=tissue,
+        enzyme=enzyme,
+        isolation_window=isolation_window,
+        resolution=resolution,
+        collision_energy=collision_energy,
+        scan_range=scan_range,
         lc_gradient=lc_gradient,
         lc_gradient_minutes=lc_minutes,
         evidence=(
@@ -378,6 +437,12 @@ def extract_project_features(project: dict[str, Any], sdrf_rows: list[dict[str, 
             + sdrf_laboratory_evidence
             + fragmentation_evidence
             + lc_evidence
+            + tissue_evidence
+            + enzyme_evidence
+            + isolation_evidence
+            + resolution_evidence
+            + collision_evidence
+            + scan_evidence
         ),
     )
 
@@ -427,6 +492,12 @@ def extract_file_features(
     if lc_gradient is None:
         lc_gradient = project_features.lc_gradient
         lc_minutes = project_features.lc_gradient_minutes
+    tissue, tissue_evidence = _named_text_from_fields(fields, "tissue", "organism part")
+    enzyme, enzyme_evidence = _named_text_from_fields(fields, "enzyme", "protease")
+    isolation_window, isolation_evidence = _named_number_from_fields(fields, "isolation window")
+    resolution, resolution_evidence = _named_number_from_fields(fields, "resolution")
+    collision_energy, collision_evidence = _named_number_from_fields(fields, "collision energy")
+    scan_range, scan_evidence = _named_text_from_fields(fields, "scan range")
 
     return DiscoveryFeatureSummary(
         instrument_names=names,
@@ -435,6 +506,12 @@ def extract_file_features(
         instrument_generation_score=generation_score,
         instrument_generation_label=generation_label,
         fragmentation_methods=fragmentation,
+        tissue=tissue or project_features.tissue,
+        enzyme=enzyme or project_features.enzyme,
+        isolation_window=isolation_window if isolation_window is not None else project_features.isolation_window,
+        resolution=resolution if resolution is not None else project_features.resolution,
+        collision_energy=collision_energy if collision_energy is not None else project_features.collision_energy,
+        scan_range=scan_range or project_features.scan_range,
         lc_gradient=lc_gradient,
         lc_gradient_minutes=lc_minutes,
         evidence=(
@@ -443,6 +520,12 @@ def extract_file_features(
             + inherited_instrument_evidence
             + fragmentation_evidence
             + lc_evidence
+            + tissue_evidence
+            + enzyme_evidence
+            + isolation_evidence
+            + resolution_evidence
+            + collision_evidence
+            + scan_evidence
         ),
     )
 

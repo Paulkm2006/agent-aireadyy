@@ -27,6 +27,17 @@ USABLE_VALIDITY = {"valid", "weak_keep"}
 TASK_READY_STATUSES = {"ready"}
 PIPELINE_ELIGIBLE_STATUSES = {"ready", "weak_ready"}
 
+
+def _instrument_vendor(names: list[str]) -> str | None:
+    text = " ".join(names).casefold()
+    if any(token in text for token in ("q exactive", "orbitrap", "thermo")):
+        return "Thermo Fisher Scientific"
+    if any(token in text for token in ("timstof", "bruker")):
+        return "Bruker"
+    if any(token in text for token in ("sciex", "tripletof")):
+        return "SCIEX"
+    return None
+
 TASK_BUILD_COLUMNS = [
     "run_id",
     "task_type",
@@ -71,8 +82,17 @@ TASK_BUILD_COLUMNS = [
     "file_score",
     "evidence_level",
     "sdrf_match_status",
+    "tissue",
+    "enzyme",
+    "instrument_names",
+    "instrument_vendor",
     "instrument_families",
     "fragmentation_methods",
+    "acquisition_mode",
+    "isolation_window",
+    "resolution",
+    "collision_energy",
+    "scan_range",
     "lc_gradient_minutes",
 ]
 
@@ -121,8 +141,17 @@ class TaskBuildFile(JsonModel):
     file_score: float = 0.0
     evidence_level: str = "unknown"
     sdrf_match_status: str = "not_checked"
+    tissue: str | None = None
+    enzyme: str | None = None
+    instrument_names: list[str] = Field(default_factory=list)
+    instrument_vendor: str | None = None
     instrument_families: list[str] = Field(default_factory=list)
     fragmentation_methods: list[str] = Field(default_factory=list)
+    acquisition_mode: str | None = None
+    isolation_window: float | None = None
+    resolution: float | None = None
+    collision_energy: float | None = None
+    scan_range: str | None = None
     lc_gradient_minutes: float | None = None
 
 
@@ -317,8 +346,17 @@ def _row_from_file(file: DiscoveredFile, *, profile: TaskProfile, run_id: str | 
         file_score=file.file_score,
         evidence_level=file.evidence_level,
         sdrf_match_status=file.sdrf_match_status,
+        tissue=file.tissue,
+        enzyme=file.enzyme,
+        instrument_names=file.instrument_names,
+        instrument_vendor=file.instrument_vendor or _instrument_vendor(file.instrument_names),
         instrument_families=file.instrument_families,
         fragmentation_methods=file.fragmentation_methods,
+        acquisition_mode=file.acquisition_mode,
+        isolation_window=file.isolation_window,
+        resolution=file.resolution,
+        collision_energy=file.collision_energy,
+        scan_range=file.scan_range,
         lc_gradient_minutes=file.lc_gradient_minutes,
     )
 
@@ -483,8 +521,17 @@ def _row_to_csv(row: TaskBuildFile) -> dict[str, Any]:
         "file_score": row.file_score,
         "evidence_level": row.evidence_level,
         "sdrf_match_status": row.sdrf_match_status,
+        "tissue": row.tissue or "",
+        "enzyme": row.enzyme or "",
+        "instrument_names": _join(row.instrument_names),
+        "instrument_vendor": row.instrument_vendor or "",
         "instrument_families": _join(row.instrument_families),
         "fragmentation_methods": _join(row.fragmentation_methods),
+        "acquisition_mode": row.acquisition_mode or "",
+        "isolation_window": row.isolation_window if row.isolation_window is not None else "",
+        "resolution": row.resolution if row.resolution is not None else "",
+        "collision_energy": row.collision_energy if row.collision_energy is not None else "",
+        "scan_range": row.scan_range or "",
         "lc_gradient_minutes": row.lc_gradient_minutes if row.lc_gradient_minutes is not None else "",
     }
 

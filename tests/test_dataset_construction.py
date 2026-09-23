@@ -28,6 +28,10 @@ from agent.dataset_construction import (
 from agent.operations.config import OperationsSettings
 from agent.operations.database import OperationsDatabase
 from agent.dataset_construction.agent_runtime import build_dataset_construction_agent
+from agent.dataset_construction.benchmark import (
+    DENOVO_BENCHMARK_PROFILE,
+    curate_denovo_benchmark,
+)
 from agent.dataset_construction.cli import app as dataset_cli
 
 
@@ -311,11 +315,22 @@ def test_split_suite_exposes_all_protocols_and_never_silently_falls_back() -> No
         "instrument_disjoint",
         "organism_disjoint",
         "peptide_disjoint",
+        "protein_family_disjoint",
         "modification_disjoint",
         "acquisition_disjoint",
     }
-    assert all(plan.status == "ready" for plan in suite.protocols.values())
+    assert suite.protocols["protein_family_disjoint"].status == "inconclusive"
+    assert suite.protocols["protein_family_disjoint"].reasons == [
+        "missing_required_identity:protein_family_ids"
+    ]
+    assert all(
+        plan.status == "ready"
+        for name, plan in suite.protocols.items()
+        if name != "protein_family_disjoint"
+    )
     for name, plan in suite.protocols.items():
+        if name == "protein_family_disjoint":
+            continue
         assert plan.resolved_protocol == name
         assert {row.split for row in plan.allocations} == {"train", "validation", "test"}
 
@@ -582,6 +597,8 @@ def test_dataset_release_is_frozen_with_checksums_and_sql_index(tmp_path: Path) 
     assert Path(release.files["release_manifest_json"]).is_file()
     assert Path(release.files["checksums_sha256"]).is_file()
     assert Path(release.files["catalog_contract_json"]).is_file()
+    assert Path(release.files["benchmark_quality_report_json"]).is_file()
+    assert Path(release.files["benchmark_index_parquet"]).is_file()
     assert Path(release.files["identity_ledger_parquet"]).is_file()
     identity_summary = json.loads(
         Path(release.files["identity_ledger_summary_json"]).read_text(encoding="utf-8")
@@ -599,6 +616,7 @@ def test_dataset_release_is_frozen_with_checksums_and_sql_index(tmp_path: Path) 
     manifest = json.loads(Path(release.files["release_manifest_json"]).read_text(encoding="utf-8"))
     assert manifest["release_id"] == "release-001"
     assert manifest["immutable"] is True
+    assert manifest["split_policy"]["peptide_identity_mode"] == "il_equivalent"
     assert manifest["protocols"]["project_disjoint"]["audit_status"] == "pass"
     prov = json.loads(Path(release.files["prov_json"]).read_text(encoding="utf-8"))
     assert "entity" in prov
@@ -818,6 +836,101 @@ def test_task_label_policy_blocks_unreliable_peptide_labels() -> None:
         assert "q_value_above_threshold:obs-1:0.03" in str(exc)
     else:
         raise AssertionError("an unreliable peptide label must block release")
+
+
+def test_diverse_denovo_profile_caps_repeated_modified_peptide_deterministically() -> None:
+    observations = [
+        _observation(
+            index,
+            project=f"PXD{index}",
+            file_name="same-file",
+            sample=f"s{index}",
+            lab="lab",
+            instrument="Q Exactive",
+            organism="human",
+            peptide="PEPTIDEK",
+            modification="phospho",
+            acquisition="DDA",
+        ).model_copy(
+            update={
+                "peak_count": 20 + index,
+                "total_ion_current": float(index),
+                "fragment_coverage": index / 100,
+                "search_engines": ["fragpipe", "sage"],
+                "engine_q_values": {"fragpipe": 0.005, "sage": 0.006},
+            }
+        )
+        for index in range(1, 13)
+    ]
+    catalog = curate_denovo_benchmark(
+        DatasetCatalog(source_batch_dir="/batch", observations=observations),
+        {"task_type": "denovo", "benchmark_profile": DENOVO_BENCHMARK_PROFILE},
+    )
+
+    assert len(catalog.observations) == 10
+    assert catalog.curation_report["filter_counts"]["peptidoform_frequency_cap"] == 2
+    assert [row.representative_rank for row in catalog.observations] == list(range(1, 11))
+    assert catalog.observations[0].observation_id == "obs-12"
+
+
+def test_diverse_denovo_profile_validates_required_coverage() -> None:
+    instruments = [
+        "Q Exactive HF", "Orbitrap Fusion Lumos", "Orbitrap Eclipse",
+        "Bruker timsTOF Pro", "SCIEX TripleTOF 6600",
+    ]
+    fragmentations = ["HCD", "CID", "EThcD"]
+    enzymes = ["Trypsin", "GluC", "AspN", "Chymotrypsin"]
+    ptms = ["phosphorylation", "acetylation", "ubiquitination"]
+    observations = []
+    for index in range(1, 11):
+        observations.append(
+            _observation(
+                index,
+                project=f"PXD{index}",
+                file_name=f"f{index}",
+                sample=f"s{index}",
+                lab=f"l{index}",
+                instrument=instruments[(index - 1) % len(instruments)],
+                organism=("Arabidopsis thaliana" if index == 1 else "E. coli" if index == 2 else "human"),
+                peptide=f"PEPTIDE{index}",
+                modification=ptms[(index - 1) % len(ptms)],
+                acquisition="DDA",
+            ).model_copy(
+                update={
+                    "fragmentation_method": fragmentations[(index - 1) % len(fragmentations)],
+                    "lc_gradient_minutes": 30.0 if index % 2 else 120.0,
+                    "enzyme": enzymes[(index - 1) % len(enzymes)],
+                    "peak_count": 50,
+                    "spectrum_mz": [float(value) for value in range(50)],
+                    "spectrum_intensity": [float(value + 1) for value in range(50)],
+                    "scan_number": str(index),
+                    "precursor_mz": 500.0 + index,
+                    "charge": 2,
+                    "tissue": "whole organism",
+                    "isolation_window": 1.6,
+                    "resolution": 30000.0,
+                    "collision_energy": 30.0,
+                    "scan_range": "100-1600 m/z",
+                    "modification_sites": [f"3:{ptms[(index - 1) % len(ptms)]}"],
+                    "search_engines": ["fragpipe", "sage"],
+                    "engine_q_values": {"fragpipe": 0.004, "sage": 0.008},
+                    "protein_family_ids": [f"family-{index}"],
+                }
+            )
+        )
+    task_spec = {
+        "task_type": "denovo",
+        "benchmark_profile": DENOVO_BENCHMARK_PROFILE,
+    }
+    catalog = curate_denovo_benchmark(
+        DatasetCatalog(source_batch_dir="/batch", observations=observations),
+        task_spec,
+    )
+
+    evidence = validate_catalog(catalog, task_spec=task_spec)
+
+    assert evidence["benchmark_profile"]["status"] == "pass"
+    assert evidence["benchmark_profile"]["blocking_issues"] == []
 
 
 def test_modification_identity_policy_can_hold_out_exact_peptidoforms() -> None:

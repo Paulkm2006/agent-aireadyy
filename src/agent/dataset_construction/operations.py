@@ -9,6 +9,10 @@ from typing import Any, cast
 from uuid import uuid4
 
 from agent.dataset_construction.contracts import validate_catalog
+from agent.dataset_construction.benchmark import (
+    curate_denovo_benchmark,
+    denovo_benchmark_policy,
+)
 from agent.dataset_construction.identity_ledger import build_identity_ledger
 from agent.dataset_construction.ingestion import ingest_existing_batch
 from agent.dataset_construction.leakage import audit_split
@@ -165,6 +169,8 @@ def _release_result_from_disk(
         "catalog_parquet": output_dir / "catalog" / "observations.parquet",
         "task_spec_snapshot_json": output_dir / "task_spec_snapshot.json",
         "catalog_contract_json": output_dir / "validation" / "catalog_contract.json",
+        "benchmark_quality_report_json": output_dir / "validation" / "benchmark_quality_report.json",
+        "benchmark_index_parquet": output_dir / "catalog" / "benchmark_index.parquet",
         "identity_ledger_parquet": output_dir / "identity_ledger" / "assertions.parquet",
         "identity_ledger_summary_json": output_dir / "identity_ledger" / "summary.json",
         "prov_json": output_dir / "provenance" / "prov.json",
@@ -268,11 +274,27 @@ def execute_dataset_construction_job(
             payload["batch_dir"],
             task_types=[task_type] if task_type else None,
         )
-        _event(repository, job_id, event_type="dataset_ingestion_completed", phase="ingesting", message="Existing Batch artifacts were ingested.", payload={"observation_count": len(catalog.observations), "warning_count": len(catalog.warnings)})
+        catalog = curate_denovo_benchmark(catalog, task_spec)
+        _event(
+            repository,
+            job_id,
+            event_type="dataset_ingestion_completed",
+            phase="ingesting",
+            message="Existing Batch artifacts were ingested and benchmark curation was applied when requested.",
+            payload={
+                "observation_count": len(catalog.observations),
+                "warning_count": len(catalog.warnings),
+                "benchmark_profile": catalog.curation_report,
+            },
+        )
         _cancel_if_requested(repository, job_id)
         contract = validate_catalog(catalog, task_spec=task_spec)
         _event(repository, job_id, event_type="dataset_contract_validated", phase="validating", message="Catalog and task label contract passed.", payload=contract)
         policy = SplitPolicy.model_validate(payload.get("policy") or {})
+        if denovo_benchmark_policy(task_spec) is not None:
+            policy = policy.model_copy(
+                update={"modification_identity_mode": "peptidoform"}
+            )
         ledger = build_identity_ledger(catalog, policy=policy)
         _event(repository, job_id, event_type="dataset_identity_ledger_built", phase="identity_ledger", message="Identity provenance ledger was built.", payload={"observation_count": ledger.observation_count, "dimension_count": len(ledger.dimensions), "incomplete_dimensions": [row.dimension for row in ledger.dimensions if row.missing_count]})
         _cancel_if_requested(repository, job_id)

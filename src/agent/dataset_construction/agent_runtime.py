@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from agent.dataset_construction.ingestion import ingest_existing_batch
-from agent.dataset_construction.models import DatasetConstructionJobSpec
-from agent.dataset_construction.operations import submit_dataset_construction_job
-from agent.dataset_construction.workflow import (
-    preview_split_suite_from_batch,
+from agent.dataset_construction.benchmark import (
+    curate_denovo_benchmark,
+    denovo_benchmark_policy,
 )
+from agent.dataset_construction.ingestion import ingest_existing_batch
+from agent.dataset_construction.models import DatasetConstructionJobSpec, SplitPolicy
+from agent.dataset_construction.operations import submit_dataset_construction_job
+from agent.dataset_construction.splitting import plan_split_suite
 from agent.operations.runtime import get_operations_repository
 
 
@@ -44,18 +46,31 @@ def preview_dataset_split_protocols(
     validation_ratio: float = 0.15,
     test_ratio: float = 0.15,
     seed: int = 42,
+    benchmark_profile: str = "",
 ) -> dict[str, Any]:
     """Plan every leakage-aware protocol and return statuses without writing a release."""
 
-    suite = preview_split_suite_from_batch(
-        batch_dir,
+    task_spec = {
+        "task_type": task_type,
+        **({"benchmark_profile": benchmark_profile} if benchmark_profile else {}),
+    }
+    catalog = curate_denovo_benchmark(
+        ingest_existing_batch(batch_dir, task_types=[task_type] if task_type else None),
+        task_spec,
+    )
+    policy = SplitPolicy()
+    if denovo_benchmark_policy(task_spec) is not None:
+        policy = policy.model_copy(update={"modification_identity_mode": "peptidoform"})
+    suite = plan_split_suite(
+        catalog,
         ratios=(train_ratio, validation_ratio, test_ratio),
         seed=seed,
-        task_type=task_type,
+        policy=policy,
     )
     return {
         "ratios": suite.ratios,
         "seed": suite.seed,
+        "benchmark_profile": catalog.curation_report,
         "protocols": {
             name: {
                 "status": plan.status,
@@ -119,7 +134,11 @@ def build_dataset_construction_agent(*, model: Any = None):
             "inconclusive or infeasible protocol, and never silently fall back to a weaker "
             "split. Release submission is durable, resumable, immutable, and requires "
             "explicit approval. After submission, use the status tool instead of "
-            "submitting duplicates."
+            "submitting duplicates. For a diversity-controlled de novo benchmark, use "
+            "benchmark_profile='diverse_denovo_v1'. Treat missing instrument, "
+            "fragmentation, LC gradient, enzyme, PTM, FragPipe/Sage consensus, or "
+            "per-engine q-value evidence as a release blocker; report species balance "
+            "and overlap instead of inventing metadata."
         ),
         model=model,
         tools=[
