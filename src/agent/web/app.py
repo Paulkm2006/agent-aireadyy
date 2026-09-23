@@ -626,6 +626,8 @@ def _clean_repository(value: Any, default: str = "pride") -> str:
         return "massive"
     if repository in {"iprox", "ipx"}:
         return "iprox"
+    if repository in {"local", "local_dir", "local_directory"}:
+        return "local"
     return default
 
 
@@ -2179,7 +2181,7 @@ _DISCOVERY_TASK_TYPES = {
     "chimeric_interpretation",
 }
 _DISCOVERY_DIVERSITY_STRATEGIES = {"balanced", "high", "off"}
-_DISCOVERY_REPOSITORIES = {"pride", "massive", "iprox", "auto"}
+_DISCOVERY_REPOSITORIES = {"pride", "massive", "iprox", "auto", "local"}
 _DISCOVERY_GOALS = {"general", "ptm", "immunopeptidomics"}
 _POOL_BUILD_SCALE_PRESETS: dict[str, dict[str, int]] = {
     "quick": {
@@ -10916,7 +10918,7 @@ def _run_web_discovery(
 
     request = _clean_dataset_request(body)
     source = _clean_text(body.get("source") or body.get("discovery_source") or "remote").lower()
-    if source in {"local", "local_dir", "local_directory"}:
+    if source in {"local", "local_dir", "local_directory"} or request.repository == "local":
         _check_cancel()
         _report("Starting local directory discovery.")
         discovery_id = safe_output_stem(

@@ -27,6 +27,7 @@ type Props = {
   phase: GrillPhase;
   job: DiscoveryJob | null;
   onConfirm: (queryTerms: string[]) => void;
+  onIntentChange?: (spec: IntentSpec) => void;
   selectedSearchTerms?: string[];
   onSelectedSearchTermsChange?: (queryTerms: string[]) => void;
   onApplyDefaults: () => void;
@@ -277,6 +278,7 @@ export function DiscoveryContextRail({
   phase,
   job,
   onConfirm,
+  onIntentChange,
   selectedSearchTerms,
   onSelectedSearchTermsChange,
   onApplyDefaults,
@@ -308,6 +310,7 @@ export function DiscoveryContextRail({
       phase={phase}
       busy={phase === "running"}
       onConfirm={onConfirm}
+      onIntentChange={onIntentChange}
       selectedSearchTerms={selectedSearchTerms}
       onSelectedSearchTermsChange={onSelectedSearchTermsChange}
       onApplyDefaults={onApplyDefaults}

@@ -12,6 +12,7 @@
     "@carbon/ai-chat": "1.17.0",
     "@carbon/icons-react": "11.84.0",
     "@carbon/react": "1.112.0",
+    "@carbon/styles": "^1.115.0",
     "@carbon/web-components": "2.56.0",
     "@tanstack/react-query": "5.100.7",
     "@tanstack/react-virtual": "3.14.8",

@@ -50,7 +50,7 @@ SafetyCeilingPolicy = Literal["ask", "auto_continue_within_safety", "stop"]
 
 
 class DatasetRequest(JsonModel):
-    repository: Literal["pride", "massive", "iprox", "auto"] = "pride"
+    repository: Literal["pride", "massive", "iprox", "auto", "local"] = "pride"
     goal: str = "general"
     ptm_type: str = "unknown_ptm"
     ptm_types: list[str] = Field(default_factory=list)

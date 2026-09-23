@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM docker.m.daocloud.io/python:3.13-slim
 
 WORKDIR /app
 ENV TZ=Asia/Shanghai \
@@ -6,7 +6,6 @@ ENV TZ=Asia/Shanghai \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    docker-cli \
     curl \
     docker.io \
     git \
@@ -18,11 +17,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml ./
 COPY README.md ./
+
 COPY src/ src/
 COPY profiles/ profiles/
 COPY scripts/ scripts/
 
-RUN pip install --no-cache-dir -e ".[agents-sdk,dev,web]" fastapi "uvicorn[standard]" python-dotenv
+# Install every declared runtime extra used by the web service and dataset
+# construction workers.  Keeping this in one project install ensures the
+# Docker image follows pyproject.toml rather than an unrelated PyPI package.
+RUN pip install -i https://mirrors.ustc.edu.cn/pypi/web/simple --no-cache-dir -e ".[agents-sdk,dev,web,dataset-construction,dataset-construction-ortools-worker]"
 
 RUN mkdir -p /app/data /app/runs /app/.agent_cache
 

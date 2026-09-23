@@ -19,6 +19,7 @@ type Props = {
   spec: IntentSpec;
   phase: GrillPhase;
   onConfirm: (queryTerms: string[]) => void;
+  onIntentChange?: (spec: IntentSpec) => void;
   selectedSearchTerms?: string[];
   onSelectedSearchTermsChange?: (queryTerms: string[]) => void;
   onApplyDefaults: () => void;
@@ -160,6 +161,7 @@ export function IntentSpecPanel({
   spec,
   phase,
   onConfirm,
+  onIntentChange,
   selectedSearchTerms = [],
   onSelectedSearchTermsChange = () => undefined,
   onApplyDefaults,
@@ -176,7 +178,7 @@ export function IntentSpecPanel({
   const canConfirm =
     phase === "awaiting_confirm" &&
     gaps.ready_for_confirm &&
-    selectedSearchTerms.length > 0 &&
+    (spec.repository === "local" ? Boolean((spec.localDir || "").trim()) : selectedSearchTerms.length > 0) &&
     !busy;
   const canDefaults = (phase === "grilling" || phase === "idle" || phase === "awaiting_confirm") && !busy;
 
@@ -209,6 +211,33 @@ export function IntentSpecPanel({
       <div className="strategy-objective">
         <span>当前目标</span>
         <strong>{compact.objective}</strong>
+      </div>
+
+      <div className="strategy-source">
+        <label htmlFor="dataset-source">数据来源</label>
+        <select
+          id="dataset-source"
+          value={spec.repository === "local" ? "local" : "pride"}
+          disabled={busy}
+          onChange={(event) => onIntentChange?.({
+            ...spec,
+            repository: event.target.value === "local" ? "local" : "pride",
+            localDir: event.target.value === "local" ? spec.localDir : "",
+            confirmed: false,
+          })}
+        >
+          <option value="pride">从 PRIDE 搜索并下载</option>
+          <option value="local">使用本地数据集</option>
+        </select>
+        {spec.repository === "local" ? (
+          <input
+            aria-label="本地数据集目录"
+            placeholder="输入服务器可访问的数据集目录，例如 /data/my-dataset"
+            value={spec.localDir || ""}
+            disabled={busy}
+            onChange={(event) => onIntentChange?.({ ...spec, localDir: event.target.value, confirmed: false })}
+          />
+        ) : null}
       </div>
 
       <section className="strategy-search-themes" aria-label="待确认检索主题词">
@@ -358,7 +387,7 @@ export function IntentSpecPanel({
         </div>
       </details>
 
-      <p className="strategy-mutation-note">只有明确的策略更新会改卡；确认前不会访问 PRIDE。</p>
+      <p className="strategy-mutation-note">只有明确的策略更新会改卡；确认前不会访问数据源。</p>
       <div className="button-row intent-actions">
         <Button kind="tertiary" size="sm" renderIcon={Restart} disabled={!canDefaults} onClick={onApplyDefaults}>
           补齐稳妥默认
@@ -370,7 +399,7 @@ export function IntentSpecPanel({
           disabled={!canConfirm}
           onClick={() => onConfirm(selectedSearchTerms)}
         >
-          确认主题词，开始搜
+          {spec.repository === "local" ? "确认目录，开始处理" : "确认主题词，开始搜"}
         </Button>
       </div>
     </Tile>

@@ -2,7 +2,7 @@ services:
   web:
     build:
       context: .
-    image: pride-agent-all-in-one-local:latest
+    # image: pride-agent-all-in-one-local:latest
     container_name: pride-agent-web
     working_dir: /app
     ports:
@@ -62,7 +62,7 @@ services:
   operations-worker:
     build:
       context: .
-    image: pride-agent-all-in-one-local:latest
+    # image: pride-agent-all-in-one-local:latest
     container_name: pride-agent-operations-worker
     working_dir: /app
     command:
