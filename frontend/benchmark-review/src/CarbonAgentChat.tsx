@@ -82,6 +82,7 @@ export type GrillControls = {
 
 export type GrillExternalCommand =
   | { type: "confirm"; queryTerms: string[] }
+  | { type: "dataset_source"; repository: string; localDir: string }
   | { type: "defaults" };
 
 type Props = {
@@ -596,8 +597,17 @@ export function CarbonAgentChat({
       void handleConfirm(externalCommand.queryTerms);
     }
     if (externalCommand.type === "defaults") void handleDefaults();
+    if (externalCommand.type === "dataset_source" && !runningRef.current) {
+      abandonDialogueSession();
+      setIntent({
+        ...intentRef.current,
+        repository: externalCommand.repository,
+        localDir: externalCommand.localDir,
+        confirmed: false,
+      });
+    }
     onExternalCommandConsumed?.();
-  }, [externalCommand, handleConfirm, handleDefaults, onExternalCommandConsumed]);
+  }, [externalCommand, handleConfirm, handleDefaults, onExternalCommandConsumed, abandonDialogueSession, setIntent]);
 
   const handleRecoveryAction = useCallback(
     async (action: RecoveryAction, payload: DiscoveryRecoveryPayload) => {

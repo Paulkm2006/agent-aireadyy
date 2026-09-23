@@ -1,4 +1,10 @@
 :root { background: #f4f4f4; color: #161616; }
+.dataset-source-picker { display: grid; gap: 1rem; margin-block: 1rem; min-width: 0; }
+.dataset-source-picker > .cds--btn { justify-self: start; }
+.dataset-source-picker input[readonly] { cursor: pointer; }
+.dataset-directory-actions { display: flex; gap: .5rem; margin-block: .5rem; }
+.dataset-directory-list { list-style: none; padding: 0; max-height: 18rem; overflow-y: auto; }
+.dataset-directory-list .cds--btn { width: 100%; max-width: none; text-align: left; overflow-wrap: anywhere; }
 html, body, #root { min-height: 100%; }
 body { margin: 0; }
 .workbench { min-height: 100vh; padding-top: 3rem; background: #f4f4f4; }

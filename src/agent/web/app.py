@@ -15203,6 +15203,32 @@ async def reconcile_expert_pool_build(build_id: str, request: Request):
 
 
 # ── 健康检查 ──────────────────────────────────────────────────────
+@app.get("/api/local-datasets/directories")
+def list_local_dataset_directories(path: str = ""):
+    """Browse folders in the same filesystem used by local dataset discovery."""
+    try:
+        root = Path(_container_repo_path_hint(path)).expanduser() if path.strip() else Path.cwd()
+        root = root.resolve(strict=True)
+        if not root.is_dir():
+            return JSONResponse({"error": "请选择文件夹，而不是文件。"}, status_code=400)
+        directories = []
+        for child in root.iterdir():
+            try:
+                if child.is_dir():
+                    directories.append({"name": child.name, "path": str(child)})
+            except OSError:
+                continue
+        return {
+            "path": str(root),
+            "parent": str(root.parent) if root.parent != root else None,
+            "directories": sorted(directories, key=lambda item: item["name"].casefold()),
+        }
+    except PermissionError:
+        return JSONResponse({"error": "没有权限读取该文件夹。"}, status_code=403)
+    except (OSError, ValueError, RuntimeError):
+        return JSONResponse({"error": "目录不存在或无法访问，请检查路径。"}, status_code=400)
+
+
 @app.get("/api/health")
 async def health():
     with _tasks_lock:

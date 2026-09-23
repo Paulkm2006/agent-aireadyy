@@ -66,6 +66,15 @@ export const getHistory = (refresh = false, signal?: AbortSignal) =>
     { signal },
   );
 
+export type DatasetDirectories = WorkflowRecord & {
+  path: string;
+  parent: string | null;
+  directories: { name: string; path: string }[];
+};
+
+export const listDatasetDirectories = (path: string, signal?: AbortSignal) =>
+  workflowJson<DatasetDirectories>(`/api/local-datasets/directories?path=${encodeURIComponent(path)}`, { signal });
+
 export const preflight = (payload: WorkflowRecord) =>
   workflowJson<WorkflowRecord & { blocking_issues?: string[]; warnings?: string[] }>("/api/preflight", {
     method: "POST",

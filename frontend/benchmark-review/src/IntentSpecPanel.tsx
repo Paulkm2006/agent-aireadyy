@@ -1,6 +1,7 @@
 import { Button, Tag, Tile } from "@carbon/react";
 import { Checkmark, Restart } from "@carbon/icons-react";
 import { useState } from "react";
+import { DatasetSourcePicker } from "./DatasetSourcePicker";
 
 import type { GrillPhase, IntentSpec } from "./intent-spec";
 import {
@@ -213,32 +214,12 @@ export function IntentSpecPanel({
         <strong>{compact.objective}</strong>
       </div>
 
-      <div className="strategy-source">
-        <label htmlFor="dataset-source">数据来源</label>
-        <select
-          id="dataset-source"
-          value={spec.repository === "local" ? "local" : "pride"}
-          disabled={busy}
-          onChange={(event) => onIntentChange?.({
-            ...spec,
-            repository: event.target.value === "local" ? "local" : "pride",
-            localDir: event.target.value === "local" ? spec.localDir : "",
-            confirmed: false,
-          })}
-        >
-          <option value="pride">从 PRIDE 搜索并下载</option>
-          <option value="local">使用本地数据集</option>
-        </select>
-        {spec.repository === "local" ? (
-          <input
-            aria-label="本地数据集目录"
-            placeholder="输入服务器可访问的数据集目录，例如 /data/my-dataset"
-            value={spec.localDir || ""}
-            disabled={busy}
-            onChange={(event) => onIntentChange?.({ ...spec, localDir: event.target.value, confirmed: false })}
-          />
-        ) : null}
-      </div>
+      <DatasetSourcePicker
+        repository={spec.repository}
+        localDir={spec.localDir || ""}
+        disabled={busy}
+        onChange={(repository, localDir) => onIntentChange?.({ ...spec, repository, localDir, confirmed: false })}
+      />
 
       <section className="strategy-search-themes" aria-label="待确认检索主题词">
         <span>开始前请确认检索主题词</span>

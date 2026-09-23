@@ -370,7 +370,9 @@ export default function App() {
                 onConfirm={(queryTerms) =>
                   setExternalCommand({ type: "confirm", queryTerms })
                 }
-                onIntentChange={setIntent}
+                onIntentChange={(spec) => setExternalCommand({
+                  type: "dataset_source", repository: spec.repository, localDir: spec.localDir || "",
+                })}
                 selectedSearchTerms={selectedSearchTerms}
                 onSelectedSearchTermsChange={setSelectedSearchTerms}
                 onApplyDefaults={() =>
