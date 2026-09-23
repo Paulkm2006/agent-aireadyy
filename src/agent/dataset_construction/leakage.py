@@ -29,6 +29,7 @@ _REPORT_ONLY = (
     "organism_id",
     "peptide",
     "modified_peptide",
+    "protein_ids",
     "protein_family_ids",
     "modification_classes",
     "acquisition_id",

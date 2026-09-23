@@ -59,6 +59,30 @@ def _strings(value: Any) -> list[str]:
     return [_text(value)] if _text(value) else []
 
 
+def _float_mapping(value: Any) -> dict[str, float]:
+    decoded = _json_value(value)
+    if not isinstance(decoded, Mapping):
+        return {}
+    result: dict[str, float] = {}
+    for key, item in decoded.items():
+        parsed = _optional_float(item)
+        if parsed is not None:
+            result[_text(key).casefold()] = parsed
+    return result
+
+
+def _floats(value: Any) -> list[float]:
+    decoded = _json_value(value)
+    if not isinstance(decoded, Iterable) or isinstance(decoded, (str, bytes, Mapping)):
+        return []
+    result: list[float] = []
+    for item in decoded:
+        parsed = _optional_float(item)
+        if parsed is not None:
+            result.append(parsed)
+    return result
+
+
 _TASK_ALIASES = {
     "rt": "rt_prediction",
     "retention_time": "rt_prediction",
@@ -186,6 +210,12 @@ def _observations_from_parquet(
                 run, "file_family_id", "raw_file_family_id"
             ) or _stable_id("file-family", project_id, source_file_id)
             spectrum_id = _first(row, "spectrum_id", "usi", "native_id", "scan")
+            spectrum_mz = _floats(row.get("spectrum_mz_json") or row.get("spectrum_mz"))
+            spectrum_intensity = _floats(
+                row.get("spectrum_intensity_json") or row.get("spectrum_intensity")
+            )
+            reported_peak_count = _optional_int(row.get("peak_count"))
+            reported_tic = _optional_float(row.get("total_ion_current"))
             label_type, label_payload = _label_evidence(task_type, row)
             observation_id = _stable_id(
                 "observation",
@@ -203,22 +233,66 @@ def _observations_from_parquet(
                 source_artifact_uri=str(resolved),
                 source_row_number=row_number,
                 spectrum_id=spectrum_id,
+                scan_number=_first(row, "scan_number", "scan") or spectrum_id,
+                precursor_mz=_optional_float(row.get("precursor_mz")),
+                spectrum_mz=spectrum_mz,
+                spectrum_intensity=spectrum_intensity,
+                peak_count=reported_peak_count if reported_peak_count is not None else (len(spectrum_mz) or None),
+                total_ion_current=reported_tic if reported_tic is not None else (sum(spectrum_intensity) if spectrum_intensity else None),
+                fragment_coverage=_optional_float(row.get("fragment_coverage")),
+                psm_score=_optional_float(row.get("psm_score")),
                 sample_id=sample_id,
                 subject_id=_first(run, "subject_id", "individual_id"),
+                tissue=_first(row, "tissue", "organism_part") or _first(run, "tissue", "organism_part"),
                 technical_replicate_id=_first(run, "technical_replicate_id"),
                 fraction_id=_first(run, "fraction_id"),
                 tmt_plex_id=_first(run, "tmt_plex_id", "plex_id"),
                 lab_id=_first(row, "lab_id", "submitter_lab", "laboratory") or _first(run, "lab_id", "submitter_lab", "laboratory"),
-                instrument_id=_first(row, "instrument_id", "instrument_family", "instrument") or _first(run, "instrument_id", "instrument_family", "instrument"),
+                instrument_id=_first(
+                    row,
+                    "instrument_name",
+                    "instrument_id",
+                    "instrument_family",
+                    "instrument",
+                ) or _first(
+                    run,
+                    "instrument_name",
+                    "instrument_id",
+                    "instrument_family",
+                    "instrument",
+                ),
+                instrument_vendor=_first(row, "instrument_vendor") or _first(run, "instrument_vendor"),
                 organism_id=_first(row, "organism_taxon_id", "organism_id", "canonical_species", "species") or _first(run, "organism_id", "species", "canonical_species"),
                 acquisition_id=_first(row, "acquisition_id", "acquisition_mode", "fragmentation_method") or _first(run, "acquisition_id", "acquisition_mode"),
+                fragmentation_method=_first(row, "fragmentation_method") or _first(run, "fragmentation_method"),
+                isolation_window=_optional_float(row.get("isolation_window") or run.get("isolation_window")),
+                resolution=_optional_float(row.get("resolution") or run.get("resolution")),
+                collision_energy=_optional_float(row.get("collision_energy") or run.get("collision_energy")),
+                scan_range=_first(row, "scan_range") or _first(run, "scan_range"),
                 gradient_id=_first(row, "gradient_id", "lc_gradient_minutes", "lc_gradient") or _first(run, "gradient_id", "lc_gradient"),
+                lc_gradient_minutes=_optional_float(row.get("lc_gradient_minutes") or run.get("lc_gradient_minutes")),
+                enzyme=_first(row, "enzyme") or _first(run, "enzyme"),
                 search_workflow_id=_first(row, "search_workflow_id", "workflow_id", "search_engine") or _first(run, "search_workflow_id", "workflow_id"),
+                search_engines=_strings(
+                    _json_value(
+                        row.get("search_engines_json")
+                        or row.get("search_engines")
+                        or row.get("search_engine")
+                    )
+                ),
+                engine_q_values=_float_mapping(row.get("engine_q_values_json") or row.get("engine_q_values")),
                 peptide=_first(row, "peptide_sequence", "peptide", "sequence"),
                 modified_peptide=_first(row, "modified_sequence", "modified_peptide", "peptidoform"),
-                protein_ids=_strings(row.get("protein_accession") or row.get("protein_ids")),
-                protein_family_ids=_strings(row.get("protein_family_ids")),
+                protein_ids=_strings(
+                    _json_value(row.get("protein_accession") or row.get("protein_ids"))
+                ),
+                protein_family_ids=_strings(_json_value(row.get("protein_family_ids"))),
                 modification_classes=_strings(row.get("modification_classes") or row.get("ptm_type")),
+                modification_sites=_strings(
+                    _json_value(row.get("modification_sites") or row.get("ptm_sites"))
+                ),
+                peptide_frequency=_optional_int(row.get("peptide_frequency")) or 1,
+                representative_rank=_optional_int(row.get("representative_rank")) or 1,
                 charge=_optional_int(row.get("charge")),
                 q_value=_optional_float(row.get("q_value")),
                 psm_probability=_optional_float(row.get("psm_probability")),
@@ -309,6 +383,14 @@ def ingest_existing_batch(
                 )
                 if previous.q_value is not None or row.q_value is not None
                 else None,
+                "search_engines": sorted(
+                    set(previous.search_engines + row.search_engines),
+                    key=str.casefold,
+                ),
+                "engine_q_values": {
+                    **previous.engine_q_values,
+                    **row.engine_q_values,
+                },
                 "metadata": {
                     **previous.metadata,
                     "duplicate_source_artifacts": source_artifacts,

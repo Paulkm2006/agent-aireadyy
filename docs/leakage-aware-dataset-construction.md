@@ -10,7 +10,8 @@ The physical input is still a file. The model observation is a task-level row:
 one spectrum plus the label that the selected task learns from. Every
 observation retains its project, source file family, sample, subject,
 replicate, fraction, TMT plex, laboratory, instrument, organism, acquisition,
-peptide, modification, and source-row identities when available.
+scan number, precursor, MS/MS peaks, peptide, modification, and source-row
+identities when available.
 
 Multi-task Batch output is filtered to the `task_spec.task_type` before any
 split is planned. Each observation also carries a typed learning target and
@@ -45,6 +46,7 @@ never silently replaced by a weaker split.
 | `instrument_disjoint` | instrument | Generalization to unseen instruments |
 | `organism_disjoint` | taxon | Cross-organism generalization |
 | `peptide_disjoint` | peptide identity | De novo peptide generalization |
+| `protein_family_disjoint` | reported protein family | Homology-aware generalization; inconclusive when family IDs are unavailable |
 | `modification_disjoint` | PTM class or peptidoform | PTM generalization |
 | `acquisition_disjoint` | acquisition profile | DDA/DIA or fragmentation generalization |
 
@@ -92,11 +94,13 @@ A successful release contains:
 
 ```text
 catalog/observations.parquet
+catalog/benchmark_index.parquet
 identity_ledger/assertions.parquet
 identity_ledger/summary.json
 split_manifests/<protocol>.parquet
 audits/<protocol>.json
 validation/catalog_contract.json
+validation/benchmark_quality_report.json
 provenance/prov.json
 task_spec_snapshot.json
 release_manifest.json
@@ -132,7 +136,7 @@ POST /api/ops/jobs/{job_id}/resume
 GET  /api/ops/jobs/{job_id}/artifacts/{artifact_key}
 ```
 
-The Carbon UI is available inside **AI-ready 构建** and reports all nine
+The Carbon UI is available inside **AI-ready 构建** and reports all ten
 protocol and audit statuses rather than collapsing them into one success flag.
 
 ## One product environment
@@ -171,3 +175,11 @@ The OpenAI Agents SDK specialist exposes inspect, preview, durable submission,
 and job-status tools. Submission is marked `needs_approval=True`. Dataset
 correctness is enforced by deterministic code and independent audit rather
 than by model judgment.
+
+For a diversity-controlled de novo release, set
+`"benchmark_profile": "diverse_denovo_v1"` in the task spec. This opt-in
+profile requires DDA FragPipe/Sage consensus evidence, applies the
+representative-spectrum cap, forces exact peptidoform identity for modification
+splits, and blocks release when the requested instrument, fragmentation,
+gradient, enzyme, or PTM coverage is absent. Ordinary task specs retain the
+standard backward-compatible construction path.

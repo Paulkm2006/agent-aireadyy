@@ -18,22 +18,44 @@ class ObservationRecord(JsonModel):
     source_artifact_uri: str
     source_row_number: int
     spectrum_id: str
+    scan_number: str = ""
+    precursor_mz: float | None = None
+    spectrum_mz: list[float] = Field(default_factory=list)
+    spectrum_intensity: list[float] = Field(default_factory=list)
+    peak_count: int | None = None
+    total_ion_current: float | None = None
+    fragment_coverage: float | None = None
+    psm_score: float | None = None
     sample_id: str = ""
     subject_id: str = ""
+    tissue: str = ""
     technical_replicate_id: str = ""
     fraction_id: str = ""
     tmt_plex_id: str = ""
     lab_id: str = ""
     instrument_id: str = ""
+    instrument_vendor: str = ""
     organism_id: str = ""
     acquisition_id: str = ""
+    fragmentation_method: str = ""
+    isolation_window: float | None = None
+    resolution: float | None = None
+    collision_energy: float | None = None
+    scan_range: str = ""
     gradient_id: str = ""
+    lc_gradient_minutes: float | None = None
+    enzyme: str = ""
     search_workflow_id: str = ""
+    search_engines: list[str] = Field(default_factory=list)
+    engine_q_values: dict[str, float] = Field(default_factory=dict)
     peptide: str = ""
     modified_peptide: str = ""
     protein_ids: list[str] = Field(default_factory=list)
     protein_family_ids: list[str] = Field(default_factory=list)
     modification_classes: list[str] = Field(default_factory=list)
+    modification_sites: list[str] = Field(default_factory=list)
+    peptide_frequency: int = 1
+    representative_rank: int = 1
     charge: int | None = None
     q_value: float | None = None
     psm_probability: float | None = None
@@ -49,6 +71,7 @@ class DatasetCatalog(JsonModel):
     source_batch_dir: str
     observations: list[ObservationRecord] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    curation_report: dict[str, Any] = Field(default_factory=dict)
 
 
 class IdentityAssertion(JsonModel):

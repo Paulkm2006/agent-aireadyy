@@ -225,6 +225,41 @@ as a feasibility boundary.
   chimericity but are not labels. Resolve whether the user prioritizes a small,
   clean labeled set or broader candidates requiring downstream relabeling.
 
+## Diversity-controlled de novo benchmark
+
+When the user asks for a broad, diverse, cross-platform, or publication-grade
+de novo benchmark, recommend the explicit `diverse_denovo_v1` construction
+profile. Do not silently apply it to an ordinary de novo training-table request.
+Record accepted requirements without first-class strategy fields as structured
+`scientific_constraints`, using portfolio scope for coverage targets and
+file/spectrum scope for acquisition or label evidence.
+
+The profile's discovery and review checklist is:
+
+- seek animal, plant, and microorganism sources while reporting species shares
+  and pairwise peptide overlap; animal/plant/microorganism breadth is a target,
+  not proof that a candidate is usable;
+- cover Q Exactive, Orbitrap Fusion, Orbitrap Eclipse, timsTOF, and SCIEX
+  instruments; HCD, CID, and ETD/EThcD fragmentation; DDA only;
+- include both short gradients (at most 45 minutes) and long gradients (at
+  least 90 minutes); detailed column chemistry is optional metadata;
+- cover Trypsin, GluC, AspN, and Chymotrypsin digests and at least three PTM
+  types; never infer enzyme or PTM from peptide sequence alone;
+- retrieve isolation window, resolution, collision energy, scan range, tissue,
+  instrument, fragmentation, enzyme, LC gradient, and PTM/site evidence when
+  available. Missing evidence stays unknown and is never fabricated.
+
+Construction under this profile is fail-closed. A release requires an exact
+FragPipe/Sage intersection on raw file, scan, charge, and modified peptide,
+with each engine at q-value <= 0.01. Low-quality spectra are removed, and each
+modified peptide retains at most ten spectra ranked deterministically by
+fragment coverage, q-value, confidence/score, intensity, peak count, then
+observation id. The profile forces exact peptidoform split identity. It emits
+spectrum-, peptide-, protein-family-, and project-level overlap evidence; a
+missing protein-family identity makes that protocol inconclusive rather than
+triggering a weaker fallback. Discovery metadata is evidence for planning, but
+the downstream release gate remains authoritative.
+
 ## When the strategy is executable
 
 A strategy is sufficiently executable when:

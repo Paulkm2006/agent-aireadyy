@@ -2464,6 +2464,10 @@ def _discovery_goal_parse_system_prompt() -> str:
         "Immunopeptidomics interpretation should normalize HLA/MHC ligandome, immunopeptidome, HLA/MHC eluted ligands, neoantigen, antigen presentation, HLA-IP/MHC-IP, W6/32, pan-HLA, HLA class I/II, MHC class I/II, and HLA alleles such as HLA-A*02:01. "
         "Supported task_type values: rt_prediction, fragment_intensity_prediction, psm_scoring, "
         "denovo, ptm_denovo, chimeric_interpretation, or empty string. "
+        "A request for a diverse/cross-platform de novo benchmark still uses task_type=denovo. "
+        "Preserve its animal/plant/microorganism, instrument, fragmentation, LC-gradient, enzyme, "
+        "PTM, dual-engine 1% FDR, scan-cap, and leakage requirements for later structured planning; "
+        "do not collapse it into a generic de novo request. "
         "Supported diversity_strategy values: balanced, high, off. "
         "Supported scale_mode values: quick, balanced, exhaustive (curated is a legacy alias). "
         "Use quick with quota_flexibility=fixed when the user asks for a concrete number of usable projects; infer exhaustive when the user asks for as many relevant projects as possible / 越多越好 / 尽可能多. "
@@ -2769,7 +2773,7 @@ _DISCOVERY_STRATEGY_FIELD_SEMANTICS = {
         "Open-ended structured scientific requirements. Use this whenever a meaningful user "
         "requirement has no first-class field; do not reduce it to prose-only notes."
     ),
-    "notes": "Meaningful constraints without a first-class field.",
+    "notes": "Non-actionable context only; executable requirements belong in scientific_constraints.",
     "open_risks": "Evidence checks or unresolved scientific risks retained for later review.",
     "repository": "Repository scope.",
 }
@@ -7867,6 +7871,7 @@ def _run_discovery_grill_turn(body: dict[str, Any]) -> dict[str, Any]:
         "Choose a stable id, explicit hard/soft strength, project/file/sample/portfolio scope, operator, "
         "JSON value, and evidence_required=true. notes is context only and must never be the sole home of "
         "an actionable requirement. This rule is generic: do not wait for a vocabulary-specific branch.\n"
+        "- For an accepted diverse/cross-platform de novo benchmark, keep task_type=denovo and encode the requested animal/plant/microorganism portfolio, Q Exactive/Fusion/Eclipse/timsTOF/SCIEX coverage, HCD/CID/ETD-or-EThcD coverage, DDA evidence, short<=45 and long>=90 minute gradients, Trypsin/GluC/AspN/Chymotrypsin, at least three PTMs, FragPipe-and-Sage q<=0.01 consensus, maximum 10 spectra per modified peptide, and leakage checks as explicit scientific_constraints. Ask only about genuine tradeoffs; retrieve instrument, method, engine, and LC facts from repository evidence. Never claim the portfolio meets a coverage constraint before evidence is collected.\n"
         "- next_decision must include target_fields (one or more canonical strategy fields) and revisit_existing. Set revisit_existing=true only when the latest user explicitly asks to reconsider an already-set choice.\n"
         "- Every next_decision option must include a non-empty, schema-valid strategy_patch that completely expresses only that option's mutation meaning. All options in one menu must use this contract. target_fields is derived by the server from these patches and is not mutation authority. A later numeric/id/label selection applies exactly the stored option patch; the later model must not add defaults or reinterpret it.\n"
         "- critical_decision_agenda lists readiness blockers, NOT a forced one-by-one quiz. If the latest user_message already resolves one or more agenda items, apply them via update_strategy in THIS turn and do not re-ask them.\n"

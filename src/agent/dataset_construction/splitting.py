@@ -26,6 +26,7 @@ PROTOCOL_IDENTITIES: dict[str, str] = {
     "instrument_disjoint": "instrument_id",
     "organism_disjoint": "organism_id",
     "peptide_disjoint": "peptide",
+    "protein_family_disjoint": "protein_family_ids",
     "modification_disjoint": "modification_classes",
     "acquisition_disjoint": "acquisition_id",
 }
